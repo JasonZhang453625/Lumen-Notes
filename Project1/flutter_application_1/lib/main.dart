@@ -1788,3 +1788,301 @@ Future<String?> showGroupNameDialog(
   controller.dispose();
   return result;
 }
+Future<bool> showGroupDeleteDialog(
+  BuildContext context,
+  String group, {
+  required int noteCount,
+}) async {
+  final result = await showCupertinoDialog<bool>(
+    context: context,
+    builder: (context) => CupertinoAlertDialog(
+      title: Text('删除分组“$group”？'),
+      content: Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('该分组下的 $noteCount 条笔记会移动到“${NotesStore.defaultGroup}”。'),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        CupertinoDialogAction(
+          isDestructiveAction: true,
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('删除'),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
+Future<bool> showDeleteDialog(BuildContext context) async {
+  final result = await showCupertinoDialog<bool>(
+    context: context,
+    builder: (context) => CupertinoAlertDialog(
+      title: const Text('删除笔记？'),
+      content: const Padding(
+        padding: EdgeInsets.only(top: 8),
+        child: Text('删除后无法恢复。'),
+      ),
+      actions: [
+        CupertinoDialogAction(
+          onPressed: () => Navigator.of(context).pop(false),
+          child: const Text('取消'),
+        ),
+        CupertinoDialogAction(
+          isDestructiveAction: true,
+          onPressed: () => Navigator.of(context).pop(true),
+          child: const Text('删除'),
+        ),
+      ],
+    ),
+  );
+  return result ?? false;
+}
+
+class NoteItem {
+  NoteItem({
+    required this.id,
+    required this.content,
+    required this.createdAt,
+    required this.updatedAt,
+    required this.group,
+  });
+
+  factory NoteItem.fromJson(Map<String, dynamic> json) {
+    return NoteItem(
+      id: json['id'] as String,
+      content: json['content'] as String? ?? '',
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      group: json['group'] as String? ?? NotesStore.defaultGroup,
+    );
+  }
+
+  final String id;
+  final String content;
+  final DateTime createdAt;
+  final DateTime updatedAt;
+  final String group;
+
+  NoteItem copyWith({
+    String? id,
+    String? content,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+    String? group,
+  }) {
+    return NoteItem(
+      id: id ?? this.id,
+      content: content ?? this.content,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+      group: group ?? this.group,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'content': content,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'group': group,
+    };
+  }
+}
+
+class NotesStore extends ChangeNotifier {
+  NotesStore(this.preferences);
+
+  static const storageKey = 'lumen_notes';
+  static const defaultGroup = '未分组';
+  static const allGroupsLabel = '全部笔记';
+
+  final SharedPreferences preferences;
+  final List<NoteItem> _notes = [];
+
+  List<NoteItem> get notes => List.unmodifiable(_notes);
+
+  List<String> get groups {
+    final set = <String>{allGroupsLabel, defaultGroup};
+    for (final note in _notes) {
+      set.add(note.group.trim().isEmpty ? defaultGroup : note.group.trim());
+    }
+    final list = set.toList();
+    final custom = list
+        .where((group) => group != allGroupsLabel && group != defaultGroup)
+        .toList()
+      ..sort();
+    return [allGroupsLabel, defaultGroup, ...custom];
+  }
+
+  Future<void> load() async {
+    final raw = preferences.getString(storageKey);
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+
+    final decoded = jsonDecode(raw) as List<dynamic>;
+    _notes
+      ..clear()
+      ..addAll(
+        decoded
+            .map((item) => NoteItem.fromJson(item as Map<String, dynamic>))
+            .toList()
+          ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt)),
+      );
+    notifyListeners();
+  }
+
+  Future<void> addNote({required String content, required String group}) async {
+    final now = DateTime.now();
+    final note = NoteItem(
+      id: '${now.microsecondsSinceEpoch}-${_notes.length}',
+      content: content,
+      createdAt: now,
+      updatedAt: now,
+      group: _sanitizeGroup(group),
+    );
+    _notes.insert(0, note);
+    await _persist();
+  }
+
+  Future<void> updateNote(NoteItem next) async {
+    final index = _notes.indexWhere((note) => note.id == next.id);
+    if (index == -1) {
+      return;
+    }
+    _notes[index] = next;
+    _notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    await _persist();
+  }
+
+  Future<void> moveNote(String noteId, String group) async {
+    final note = noteById(noteId);
+    if (note == null) {
+      return;
+    }
+    await updateNote(
+      note.copyWith(group: _sanitizeGroup(group), updatedAt: DateTime.now()),
+    );
+  }
+
+  Future<void> deleteNote(String noteId) async {
+    _notes.removeWhere((note) => note.id == noteId);
+    await _persist();
+  }
+
+  NoteItem? noteById(String noteId) {
+    for (final note in _notes) {
+      if (note.id == noteId) {
+        return note;
+      }
+    }
+    return null;
+  }
+
+  List<NoteItem> filteredNotes({required String query, required String group}) {
+    final lowerQuery = query.trim().toLowerCase();
+    return _notes.where((note) {
+      final matchesGroup =
+          group == allGroupsLabel ? true : note.group == _sanitizeGroup(group);
+      final matchesQuery =
+          lowerQuery.isEmpty || note.content.toLowerCase().contains(lowerQuery);
+      return matchesGroup && matchesQuery;
+    }).toList();
+  }
+
+  int groupCount(String group) {
+    if (group == allGroupsLabel) {
+      return _notes.length;
+    }
+    return _notes.where((note) => note.group == _sanitizeGroup(group)).length;
+  }
+
+  bool isCustomGroup(String group) {
+    return group != allGroupsLabel && group != defaultGroup;
+  }
+
+  Future<void> renameGroup(String previousGroup, String nextGroup) async {
+    if (!isCustomGroup(previousGroup)) {
+      return;
+    }
+    final sanitized = _sanitizeGroup(nextGroup);
+    if (sanitized == previousGroup) {
+      return;
+    }
+    final now = DateTime.now();
+    for (var index = 0; index < _notes.length; index++) {
+      final note = _notes[index];
+      if (note.group == previousGroup) {
+        _notes[index] = note.copyWith(group: sanitized, updatedAt: now);
+      }
+    }
+    _notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    await _persist();
+  }
+
+  Future<void> deleteGroup(String group) async {
+    if (!isCustomGroup(group)) {
+      return;
+    }
+    final now = DateTime.now();
+    for (var index = 0; index < _notes.length; index++) {
+      final note = _notes[index];
+      if (note.group == group) {
+        _notes[index] = note.copyWith(group: defaultGroup, updatedAt: now);
+      }
+    }
+    _notes.sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    await _persist();
+  }
+
+  Future<void> _persist() async {
+    final payload = jsonEncode(_notes.map((note) => note.toJson()).toList());
+    await preferences.setString(storageKey, payload);
+    notifyListeners();
+  }
+
+  String _sanitizeGroup(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty || trimmed == allGroupsLabel) {
+      return defaultGroup;
+    }
+    return trimmed;
+  }
+}
+
+class AppDateFormatter {
+  static String full(DateTime dateTime) {
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    final hour = dateTime.hour.toString().padLeft(2, '0');
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    return '${dateTime.year}/$month/$day  $hour:$minute';
+  }
+
+  static String shortDate(DateTime dateTime) {
+    final month = dateTime.month.toString().padLeft(2, '0');
+    final day = dateTime.day.toString().padLeft(2, '0');
+    return '${dateTime.year}/$month/$day';
+  }
+}
+
+class AppColors {
+  static const ink = Color(0xFF0E2229);
+  static const muted = Color(0x99102029);
+  static const hint = Color(0x66102029);
+  static const accent = Color(0xFF163A46);
+  static const line = Color(0x9EFFFFFF);
+}
+
+enum _CardAction { move, delete }
+
+class _CardActionResult {
+  const _CardActionResult({required this.action});
+
+  final _CardAction action;
+}
