@@ -133,18 +133,7 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
              animation: animation,
              builder: (context, _) {
                final endRect = Offset.zero & MediaQuery.sizeOf(context);
-               final scaleX = lerpDouble(
-                 startRect.width / endRect.width,
-                 1,
-                 progress.value,
-               )!;
-               final scaleY = lerpDouble(
-                 startRect.height / endRect.height,
-                 1,
-                 progress.value,
-               )!;
-               final translateX = lerpDouble(startRect.left, 0, progress.value)!;
-               final translateY = lerpDouble(startRect.top, 0, progress.value)!;
+               final rect = Rect.lerp(startRect, endRect, progress.value)!;
                final radius = lerpDouble(startRadius, 28, progress.value)!;
                final showOpacity = Curves.easeOutCubic.transform(
                  ((animation.value - 0.58) / 0.42).clamp(0.0, 1.0),
@@ -165,24 +154,17 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
                        ),
                      ),
                    ),
-                   Positioned.fill(
+                   Positioned.fromRect(
+                     rect: rect,
                      child: IgnorePointer(
                        ignoring: animation.status != AnimationStatus.completed,
-                       child: Transform.translate(
-                         offset: Offset(translateX, translateY),
-                         child: Transform.scale(
-                           alignment: Alignment.topLeft,
-                           scaleX: scaleX,
-                           scaleY: scaleY,
-                           child: ClipRRect(
-                             borderRadius: BorderRadius.circular(radius),
-                             child: ColoredBox(
-                               color: kOpenTransitionBackdrop,
-                               child: Opacity(
-                                 opacity: childOpacity,
-                                 child: child,
-                               ),
-                             ),
+                       child: ClipRRect(
+                         borderRadius: BorderRadius.circular(radius),
+                         child: ColoredBox(
+                           color: kOpenTransitionBackdrop,
+                           child: Opacity(
+                             opacity: childOpacity,
+                             child: child,
                            ),
                          ),
                        ),
@@ -258,6 +240,12 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    if (_homeCardsOpacity != 0) {
+      setState(() {
+        _homeCardsOpacity = 0;
+      });
+    }
+
     await Navigator.of(context).push(
       _CardExpandRoute<void>(
         startRect: startRect,
@@ -272,9 +260,6 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _homeCardsOpacity = 0;
-    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
@@ -387,33 +372,13 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
     super.initState();
     _controller = TextEditingController();
     _editorFocusNode = FocusNode();
-    _controller.addListener(_onChanged);
-
-    Future<void>.delayed(
-      kHomeCardControlsDelay + kDetailRevealDuration,
-      () {
-        if (!mounted) {
-          return;
-        }
-        if (ModalRoute.of(context)?.isCurrent != true) {
-          return;
-        }
-        _editorFocusNode.requestFocus();
-      },
-    );
   }
 
   @override
   void dispose() {
-    _controller
-      ..removeListener(_onChanged)
-      ..dispose();
+    _controller.dispose();
     _editorFocusNode.dispose();
     super.dispose();
-  }
-
-  void _onChanged() {
-    setState(() {});
   }
 
   void _safePop() {
@@ -421,6 +386,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
   }
 
   Future<void> _pickGroup() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final picked = await pickGroup(
       context,
       widget.store,
@@ -459,76 +425,67 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
               title: '新建笔记',
               subtitle: '记录日期 ${AppDateFormatter.dateOnly(DateTime.now())}',
               onBack: _safePop,
-              trailing: HeaderButton(
-                icon: CupertinoIcons.check_mark,
-                onTap: _controller.text.trim().isEmpty ? null : _save,
+              trailing: ValueListenableBuilder<TextEditingValue>(
+                valueListenable: _controller,
+                builder: (context, value, _) {
+                  return HeaderButton(
+                    icon: CupertinoIcons.check_mark,
+                    onTap: value.text.trim().isEmpty ? null : _save,
+                  );
+                },
               ),
             ),
             const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: GroupPill(
-                    label: _group,
-                    onTap: _pickGroup,
+            RepaintBoundary(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GroupPill(
+                      label: _group,
+                      onTap: _pickGroup,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                GlassPanel(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '状态',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: AppColors.textSecondary,
+                  const SizedBox(width: 12),
+                  GlassPanel(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    child: ValueListenableBuilder<TextEditingValue>(
+                      valueListenable: _controller,
+                      builder: (context, value, _) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '状态',
+                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: AppColors.textSecondary,
+                                  ),
                             ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        _controller.text.trim().isEmpty ? '未填写' : '可保存',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
+                            const SizedBox(height: 4),
+                            Text(
+                              value.text.trim().isEmpty ? '未填写' : '可保存',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                    color: AppColors.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                             ),
-                      ),
-                    ],
+                          ],
+                        );
+                      },
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
             const SizedBox(height: 18),
             Expanded(
-              child: GlassPanel(
-                padding: EdgeInsets.zero,
-                child: TextField(
-                  controller: _controller,
-                  focusNode: _editorFocusNode,
-                  autofocus: false,
-                  maxLines: null,
-                  expands: true,
-                  textCapitalization: TextCapitalization.sentences,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: 20,
-                        height: 1.55,
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                  decoration: const InputDecoration(
-                    contentPadding: EdgeInsets.fromLTRB(22, 22, 22, 22),
-                    border: InputBorder.none,
-                    hintText: '输入句子、单词、语法点或任意学习笔记',
-                    hintStyle: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
-                ),
+              child: EditorTextSurface(
+                controller: _controller,
+                focusNode: _editorFocusNode,
+                textCapitalization: TextCapitalization.sentences,
+                hintText: '输入句子、单词、语法点或任意学习笔记',
               ),
             ),
           ],
@@ -551,7 +508,6 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
   late final TextEditingController _searchController;
   String _selectedGroup = NotesStore.allGroupsLabel;
   bool _groupsExpanded = false;
-  double _noteCardTextOpacity = 1;
 
   @override
   void initState() {
@@ -581,27 +537,19 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
     });
   }
 
-  Rect? _cardRect(GlobalKey key) {
-    final context = key.currentContext;
-    if (context == null) {
-      return null;
-    }
-    final box = context.findRenderObject() as RenderBox?;
+  Rect? _cardRect(BuildContext cardContext) {
+    final box = cardContext.findRenderObject() as RenderBox?;
     if (box == null || !box.hasSize) {
       return null;
     }
     return box.localToGlobal(Offset.zero) & box.size;
   }
 
-  Future<void> _openNoteFromCard(NoteItem note, GlobalKey cardKey) async {
-    final startRect = _cardRect(cardKey);
+  Future<void> _openNoteFromCard(NoteItem note, BuildContext cardContext) async {
+    final startRect = _cardRect(cardContext);
     if (startRect == null || !mounted) {
       return;
     }
-
-    setState(() {
-      _noteCardTextOpacity = 0;
-    });
 
     await Navigator.of(context).push(
       _CardExpandRoute<void>(
@@ -624,16 +572,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
       _selectedGroup = NotesStore.allGroupsLabel;
     }
     setState(() {});
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) {
-        return;
-      }
-      setState(() {
-        _noteCardTextOpacity = 1;
-      });
-    });
   }
-
   Future<void> _showCardActions(NoteItem note) async {
     final action = await showModalBottomSheet<_CardAction>(
       context: context,
@@ -645,13 +584,13 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
             children: [
               ActionTile(
                 icon: CupertinoIcons.square_pencil,
-                label: '调整分组',
+                label: '璋冩暣鍒嗙粍',
                 onTap: () => Navigator.of(sheetContext).pop(_CardAction.move),
               ),
               const SizedBox(height: 10),
               ActionTile(
                 icon: CupertinoIcons.delete,
-                label: '删除笔记',
+                label: '鍒犻櫎绗旇',
                 color: AppColors.destructive,
                 onTap: () => Navigator.of(sheetContext).pop(_CardAction.delete),
               ),
@@ -856,7 +795,10 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                     ),
                   ),
                   AnimatedCrossFade(
-                    duration: const Duration(milliseconds: 300),
+                    duration: const Duration(milliseconds: 340),
+                    firstCurve: Curves.easeInCubic,
+                    secondCurve: Curves.easeOutCubic,
+                    sizeCurve: Curves.easeOutCubic,
                     crossFadeState: _groupsExpanded
                         ? CrossFadeState.showSecond
                         : CrossFadeState.showFirst,
@@ -867,6 +809,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                         ConstrainedBox(
                           constraints: const BoxConstraints(maxHeight: 280),
                           child: SingleChildScrollView(
+                            clipBehavior: Clip.none,
                             child: Column(
                               children: groups
                                   .map(
@@ -923,15 +866,12 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                       itemCount: notes.length,
                       itemBuilder: (context, index) {
                         final note = notes[index];
-                        final noteCardKey = GlobalKey();
 
-                        return KeyedSubtree(
-                          key: noteCardKey,
-                          child: NoteCard(
+                        return Builder(
+                          builder: (cardContext) => NoteCard(
                             note: note,
-                            onTap: () => _openNoteFromCard(note, noteCardKey),
+                            onTap: () => _openNoteFromCard(note, cardContext),
                             onLongPress: () => _showCardActions(note),
-                            contentOpacity: _noteCardTextOpacity,
                           ),
                         );
                       },
@@ -969,24 +909,22 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     _note = note;
     _group = note.group;
     _controller = TextEditingController(text: note.content);
-    _controller.addListener(_refresh);
   }
 
   @override
   void dispose() {
-    _controller
-      ..removeListener(_refresh)
-      ..dispose();
+    _controller.dispose();
     super.dispose();
   }
 
-  void _refresh() {
-    if (mounted) {
-      setState(() {});
-    }
+  bool _hasChangesForText(String text) {
+    return text.trim() != _note.content.trim() || _group != _note.group;
   }
 
+  bool get _hasPendingChanges => _hasChangesForText(_controller.text);
+
   Future<void> _pickGroup() async {
+    FocusManager.instance.primaryFocus?.unfocus();
     final picked = await pickGroup(
       context,
       widget.store,
@@ -1068,13 +1006,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final changed = _controller.text.trim() != _note.content.trim() || _group != _note.group;
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        await _onWillPop(changed);
+        await _onWillPop(_hasPendingChanges);
       },
       child: AppScaffold(
         resizeToAvoidBottomInset: true,
@@ -1086,93 +1022,81 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
             children: [
               DetailHeader(
                 title: '阅读与编辑',
-                subtitle: ' ${AppDateFormatter.dateTime(_note.updatedAt)}编辑',
-                onBack: () => _onWillPop(changed),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
+                subtitle: '${AppDateFormatter.dateTime(_note.updatedAt)}编辑',
+                onBack: () => _onWillPop(_hasPendingChanges),
+                trailing: ValueListenableBuilder<TextEditingValue>(
+                  valueListenable: _controller,
+                  builder: (context, value, _) {
+                    final changed = _hasChangesForText(value.text);
+                    final canSave = changed && value.text.trim().isNotEmpty;
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        HeaderButton(
+                          icon: CupertinoIcons.delete,
+                          destructive: true,
+                          onTap: _delete,
+                        ),
+                        const SizedBox(width: 10),
+                        HeaderButton(
+                          icon: CupertinoIcons.check_mark,
+                          onTap: canSave ? _save : null,
+                        ),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              const SizedBox(height: 10),
+              RepaintBoundary(
+                child: Row(
                   children: [
-                    HeaderButton(
-                      icon: CupertinoIcons.delete,
-                      destructive: true,
-                      onTap: _delete,
+                    Expanded(
+                      child: GroupPill(
+                        label: _group,
+                        onTap: _pickGroup,
+                      ),
                     ),
-                    const SizedBox(width: 10),
-                    HeaderButton(
-                      icon: CupertinoIcons.check_mark,
-                      onTap: changed && _controller.text.trim().isNotEmpty ? _save : null,
+                    const SizedBox(width: 12),
+                    GlassPanel(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '创建于',
+                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                  color: AppColors.textSecondary,
+                                ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            AppDateFormatter.dateOnly(_note.createdAt),
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 18),
-            Row(
-              children: [
-                Expanded(
-                  child: GroupPill(
-                    label: _group,
-                    onTap: _pickGroup,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                GlassPanel(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '创建于',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: AppColors.textSecondary,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        AppDateFormatter.dateOnly(_note.createdAt),
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w600,
-                            ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Expanded(
-              child: GlassPanel(
-                padding: EdgeInsets.zero,
-                child: TextField(
+              Expanded(
+                child: EditorTextSurface(
                   controller: _controller,
-                  autofocus: false,
-                  maxLines: null,
-                  expands: true,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontSize: 20,
-                        height: 1.55,
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w500,
-                      ),
-                  decoration: const InputDecoration(
-                    contentPadding: EdgeInsets.fromLTRB(22, 22, 22, 22),
-                    border: InputBorder.none,
-                    hintText: '开始编辑你的笔记',
-                    hintStyle: TextStyle(
-                      color: AppColors.textMuted,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w400,
-                    ),
-                  ),
+                  hintText: '开始编辑你的笔记',
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
-    ),
     );
   }
 }
@@ -1204,7 +1128,9 @@ class AppScaffold extends StatelessWidget {
       body: withPageBackdrop
           ? Stack(
               children: [
-                const Positioned.fill(child: GradientBackdropLayer()),
+                const Positioned.fill(
+                  child: RepaintBoundary(child: GradientBackdropLayer()),
+                ),
                 safeBody,
               ],
             )
@@ -1218,47 +1144,18 @@ class GradientBackdropLayer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Stack(
-      alignment: Alignment.topLeft,
-      children: [
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFFF6F8FB),
-                Color(0xFFEAF1F6),
-                Color(0xFFF6FAFD),
-              ],
-            ),
-          ),
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color(0xFFF5F7FA),
+            Color(0xFFEFF3F7),
+            Color(0xFFF8FAFC),
+          ],
         ),
-        const Positioned(
-          top: -80,
-          right: -40,
-          child: BlurredOrb(
-            size: 220,
-            colors: [Color(0x70D6F2FF), Color(0x00D6F2FF)],
-          ),
-        ),
-        const Positioned(
-          bottom: 60,
-          left: -30,
-          child: BlurredOrb(
-            size: 180,
-            colors: [Color(0x66E4D8FF), Color(0x00E4D8FF)],
-          ),
-        ),
-        const Positioned(
-          top: 220,
-          left: 40,
-          child: BlurredOrb(
-            size: 120,
-            colors: [Color(0x54BDE8F3), Color(0x00BDE8F3)],
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -1280,29 +1177,6 @@ class GradientBackdrop extends StatelessWidget {
   }
 }
 
-class BlurredOrb extends StatelessWidget {
-  const BlurredOrb({super.key, required this.size, required this.colors});
-
-  final double size;
-  final List<Color> colors;
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: ImageFiltered(
-        imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-        child: Container(
-          width: size,
-          height: size,
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            gradient: RadialGradient(colors: colors),
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 class GlassPanel extends StatelessWidget {
   const GlassPanel({
@@ -1322,46 +1196,87 @@ class GlassPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final panel = Container(
+    return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            AppColors.panelStrong.withValues(alpha: frosted ? 0.72 : 0.98),
-            AppColors.panelBase.withValues(alpha: frosted ? 0.64 : 0.96),
-          ],
-        ),
+        color: const Color(0xFFF1F5F8),
         border: Border.all(
-          color: const Color(0xAAFFFFFF),
+          color: const Color(0xFFDCE4EA),
           width: 1,
         ),
         boxShadow: const [
           BoxShadow(
-            color: Color(0x120A1A28),
-            blurRadius: 24,
-            offset: Offset(0, 12),
+            color: Color(0x0E0A1A28),
+            blurRadius: 16,
+            offset: Offset(0, 8),
           ),
         ],
       ),
       child: Padding(padding: padding, child: child),
     );
-
-    if (!frosted) {
-      return panel;
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(radius),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-        child: panel,
-      ),
-    );
   }
 }
 
+class EditorTextSurface extends StatelessWidget {
+  const EditorTextSurface({
+    super.key,
+    required this.controller,
+    required this.hintText,
+    this.focusNode,
+    this.textCapitalization = TextCapitalization.none,
+  });
+
+  final TextEditingController controller;
+  final String hintText;
+  final FocusNode? focusNode;
+  final TextCapitalization textCapitalization;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        const RepaintBoundary(
+          child: IgnorePointer(
+            child: GlassPanel(
+              padding: EdgeInsets.zero,
+              child: SizedBox.expand(),
+            ),
+          ),
+        ),
+        RepaintBoundary(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+            child: TextField(
+              controller: controller,
+              focusNode: focusNode,
+              autofocus: false,
+              maxLines: null,
+              expands: true,
+              textCapitalization: textCapitalization,
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontSize: 20,
+                    height: 1.55,
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w500,
+                  ),
+              decoration: InputDecoration(
+                border: InputBorder.none,
+                isCollapsed: true,
+                hintText: hintText,
+                hintStyle: const TextStyle(
+                  color: AppColors.textMuted,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w400,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 class HeroActionCard extends StatelessWidget {
   const HeroActionCard({
     super.key,
@@ -1389,10 +1304,8 @@ class HeroActionCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: GlassPanel(
-        frosted: true,
         padding: EdgeInsets.zero,
         radius: 36,
-        blurSigma: 16,
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(36),
@@ -1475,6 +1388,7 @@ class HeroActionCard extends StatelessWidget {
   }
 }
 
+
 class DetailHeader extends StatelessWidget {
   const DetailHeader({
     super.key,
@@ -1547,47 +1461,24 @@ class HeaderButton extends StatelessWidget {
 
     return Opacity(
       opacity: disabled ? 0.42 : 1,
-      child: Container(
-        decoration: BoxDecoration(
+      child: Material(
+        color: const Color(0xFFF1F5F8),
+        borderRadius: BorderRadius.circular(24),
+        child: InkWell(
+          onTap: onTap,
           borderRadius: BorderRadius.circular(24),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x100A1A28),
-              blurRadius: 14,
-              offset: Offset(0, 8),
-            ),
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: BackdropFilter(
-            filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(24),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        Colors.white.withValues(alpha: 0.65),
-                        Colors.white.withValues(alpha: 0.25),
-                      ],
-                    ),
-                    border: Border.all(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Icon(icon, size: 20, color: foreground),
-                ),
+          child: Ink(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF1F5F8),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: const Color(0xFFDCE4EA),
+                width: 1,
               ),
             ),
+            child: Icon(icon, size: 20, color: foreground),
           ),
         ),
       ),
@@ -2008,92 +1899,73 @@ class NoteCard extends StatelessWidget {
     required this.note,
     required this.onTap,
     required this.onLongPress,
-    this.contentOpacity = 1,
   });
 
   final NoteItem note;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
-  final double contentOpacity;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x120A1A28),
-            blurRadius: 18,
-            offset: Offset(0, 10),
+    return Material(
+      color: AppColors.panelStrong,
+      borderRadius: BorderRadius.circular(30),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Container(
+          decoration: BoxDecoration(
+            border: Border.all(color: const Color(0xB8FFFFFF)),
+            borderRadius: BorderRadius.circular(30),
           ),
-        ],
-      ),
-      child: Material(
-        color: AppColors.panelStrong,
-        borderRadius: BorderRadius.circular(30),
-        clipBehavior: Clip.antiAlias,
-        child: InkWell(
-          onTap: onTap,
-          onLongPress: onLongPress,
-          child: Container(
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xB8FFFFFF)),
-              borderRadius: BorderRadius.circular(30),
-            ),
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-            child: AnimatedOpacity(
-              opacity: contentOpacity,
-              duration: const Duration(milliseconds: 220),
-              curve: Curves.easeOutCubic,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          note.group,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                color: AppColors.textSecondary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                        ),
-                      ),
-                      const Icon(
-                        CupertinoIcons.ellipsis,
-                        size: 18,
-                        color: AppColors.textMuted,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
                   Expanded(
                     child: Text(
-                      note.preview,
-                      maxLines: 7,
+                      note.group,
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            color: AppColors.textPrimary,
-                            fontSize: 18,
-                            height: 1.48,
-                            fontWeight: FontWeight.w500,
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w600,
                           ),
                     ),
                   ),
-                  const SizedBox(height: 14),
-                  Text(
-                    AppDateFormatter.dateTime(note.updatedAt),
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: AppColors.textMuted,
-                          fontWeight: FontWeight.w600,
-                        ),
+                  const Icon(
+                    CupertinoIcons.ellipsis,
+                    size: 18,
+                    color: AppColors.textMuted,
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: Text(
+                  note.preview,
+                  maxLines: 7,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontSize: 18,
+                        height: 1.48,
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                AppDateFormatter.dateTime(note.updatedAt),
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+              ),
+            ],
           ),
         ),
       ),
