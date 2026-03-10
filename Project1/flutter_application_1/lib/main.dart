@@ -1,7 +1,6 @@
 import 'dart:convert';
 import 'dart:ui';
 
-import 'package:animations/animations.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 const double kGroupActionWidth = 92;
 const Color kOpenTransitionBackdrop = Color(0xFFF1F6FA);
 const Duration kDeferredDetailDelay = Duration(milliseconds: 120);
+const Duration kHomeCardExpandDuration = Duration(milliseconds: 760);
+const Duration kHomeCardControlsDelay = kHomeCardExpandDuration;
+const Duration kDetailRevealDuration = Duration(milliseconds: 420);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -70,40 +72,128 @@ class _DeferredDetailContentState extends State<DeferredDetailContent> {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 180),
-      switchInCurve: Curves.easeOutCubic,
-      switchOutCurve: Curves.easeInCubic,
-      child: _ready
-          ? KeyedSubtree(
-              key: const ValueKey('detail-content'),
-              child: Builder(builder: widget.builder),
-            )
-          : const _DeferredDetailPlaceholder(key: ValueKey('detail-placeholder')),
+    if (!_ready) {
+      return const _DeferredDetailPlaceholder();
+    }
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween<double>(begin: 0, end: 1),
+      duration: kDetailRevealDuration,
+      curve: Curves.easeOutBack,
+      child: Builder(builder: widget.builder),
+      builder: (context, value, child) {
+        return Opacity(
+          opacity: value.clamp(0, 1),
+          child: Transform.translate(
+            offset: Offset(0, (1 - value) * 22),
+            child: Transform.scale(
+              scale: 0.96 + (0.04 * value),
+              child: child,
+            ),
+          ),
+        );
+      },
     );
   }
 }
 
 class _DeferredDetailPlaceholder extends StatelessWidget {
-  const _DeferredDetailPlaceholder({super.key});
+  const _DeferredDetailPlaceholder();
 
   @override
   Widget build(BuildContext context) {
-    return AppScaffold(
-      withPageBackdrop: true,
-      safeAreaBottom: false,
-      child: const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child: CircularProgressIndicator(
-            strokeWidth: 2.4,
-            color: AppColors.textMuted,
-          ),
-        ),
-      ),
-    );
+    return const SizedBox.expand();
   }
+}
+
+class _CardExpandRoute<T> extends PageRouteBuilder<T> {
+  _CardExpandRoute({
+    required Rect startRect,
+    required double startRadius,
+    required Widget child,
+  }) : super(
+         transitionDuration: kHomeCardExpandDuration,
+         reverseTransitionDuration: const Duration(milliseconds: 520),
+         opaque: false,
+         barrierColor: Colors.transparent,
+         pageBuilder: (context, animation, secondaryAnimation) => child,
+         transitionsBuilder: (context, animation, secondaryAnimation, child) {
+           final progress = CurvedAnimation(
+             parent: animation,
+             curve: const Cubic(0.2, 0.86, 0.22, 1.0),
+             reverseCurve: const Cubic(0.32, 0.0, 0.67, 0.0),
+           );
+           final dim = CurvedAnimation(
+             parent: animation,
+             curve: Curves.easeOutCubic,
+             reverseCurve: Curves.easeInCubic,
+           );
+
+           return AnimatedBuilder(
+             animation: animation,
+             builder: (context, _) {
+               final endRect = Offset.zero & MediaQuery.sizeOf(context);
+               final scaleX = lerpDouble(
+                 startRect.width / endRect.width,
+                 1,
+                 progress.value,
+               )!;
+               final scaleY = lerpDouble(
+                 startRect.height / endRect.height,
+                 1,
+                 progress.value,
+               )!;
+               final translateX = lerpDouble(startRect.left, 0, progress.value)!;
+               final translateY = lerpDouble(startRect.top, 0, progress.value)!;
+               final radius = lerpDouble(startRadius, 28, progress.value)!;
+               final showOpacity = Curves.easeOutCubic.transform(
+                 ((animation.value - 0.58) / 0.42).clamp(0.0, 1.0),
+               );
+               final hideOpacity =
+                   ((animation.value - 0.78) / 0.22).clamp(0.0, 1.0);
+               final childOpacity = animation.status == AnimationStatus.reverse
+                   ? hideOpacity
+                   : showOpacity;
+
+               return Stack(
+                 alignment: Alignment.topLeft,
+                 children: [
+                   Positioned.fill(
+                     child: IgnorePointer(
+                       child: ColoredBox(
+                         color: Colors.black.withValues(alpha: 0.18 * dim.value),
+                       ),
+                     ),
+                   ),
+                   Positioned.fill(
+                     child: IgnorePointer(
+                       ignoring: animation.status != AnimationStatus.completed,
+                       child: Transform.translate(
+                         offset: Offset(translateX, translateY),
+                         child: Transform.scale(
+                           alignment: Alignment.topLeft,
+                           scaleX: scaleX,
+                           scaleY: scaleY,
+                           child: ClipRRect(
+                             borderRadius: BorderRadius.circular(radius),
+                             child: ColoredBox(
+                               color: kOpenTransitionBackdrop,
+                               child: Opacity(
+                                 opacity: childOpacity,
+                                 child: child,
+                               ),
+                             ),
+                           ),
+                         ),
+                       ),
+                     ),
+                   ),
+                 ],
+               );
+             },
+           );
+         },
+       );
 }
 
 class LumenApp extends StatelessWidget {
@@ -142,6 +232,59 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  final GlobalKey _createCardKey = GlobalKey();
+  final GlobalKey _browseCardKey = GlobalKey();
+  double _homeCardsOpacity = 1;
+
+  Rect? _cardRect(GlobalKey key) {
+    final context = key.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) {
+      return null;
+    }
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  Future<void> _openFromCard({
+    required GlobalKey cardKey,
+    required WidgetBuilder pageBuilder,
+    required double startRadius,
+  }) async {
+    final startRect = _cardRect(cardKey);
+    if (startRect == null || !mounted) {
+      return;
+    }
+
+    await Navigator.of(context).push(
+      _CardExpandRoute<void>(
+        startRect: startRect,
+        startRadius: startRadius,
+        child: DeferredDetailContent(
+          delay: kHomeCardControlsDelay,
+          builder: pageBuilder,
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _homeCardsOpacity = 0;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _homeCardsOpacity = 1;
+      });
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
@@ -171,24 +314,9 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 children: [
                   Expanded(
-                    child: OpenContainer<void>(
-                      transitionType: ContainerTransitionType.fadeThrough,
-                      transitionDuration: const Duration(milliseconds: 400),
-                      closedElevation: 0,
-                      openElevation: 0,
-                      closedColor: Colors.transparent,
-                      openColor: kOpenTransitionBackdrop,
-                      middleColor: kOpenTransitionBackdrop,
-                      closedShape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(36),
-                      ),
-                      onClosed: (_) {
-                        if (mounted) setState(() {});
-                      },
-                      openBuilder: (context, _) => DeferredDetailContent(
-                        builder: (_) => CreateNoteScreen(store: widget.store),
-                      ),
-                      closedBuilder: (context, openContainer) => HeroActionCard(
+                    child: KeyedSubtree(
+                      key: _createCardKey,
+                      child: HeroActionCard(
                         indexLabel: 'A',
                         title: '新建笔记',
                         subtitle: '快速记录句子、单词、短语或任意学习内容。',
@@ -198,30 +326,20 @@ class _HomeScreenState extends State<HomeScreen> {
                           Color(0xFFF8FDFF),
                           Color(0xFFDFF3F9),
                         ],
-                        onTap: openContainer,
+                        contentOpacity: _homeCardsOpacity,
+                        onTap: () => _openFromCard(
+                          cardKey: _createCardKey,
+                          startRadius: 36,
+                          pageBuilder: (_) => CreateNoteScreen(store: widget.store),
+                        ),
                       ),
                     ),
                   ),
                   const SizedBox(height: 18),
                   Expanded(
-                    child: OpenContainer<void>(
-                      transitionType: ContainerTransitionType.fadeThrough,
-                      transitionDuration: const Duration(milliseconds: 400),
-                      closedElevation: 0,
-                      openElevation: 0,
-                      closedColor: Colors.transparent,
-                      openColor: kOpenTransitionBackdrop,
-                      middleColor: kOpenTransitionBackdrop,
-                      closedShape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(36),
-                      ),
-                      onClosed: (_) {
-                        if (mounted) setState(() {});
-                      },
-                      openBuilder: (context, _) => DeferredDetailContent(
-                        builder: (_) => BrowseNotesScreen(store: widget.store),
-                      ),
-                      closedBuilder: (context, openContainer) => HeroActionCard(
+                    child: KeyedSubtree(
+                      key: _browseCardKey,
+                      child: HeroActionCard(
                         indexLabel: 'B',
                         title: '阅览笔记',
                         subtitle: '按分组与搜索快速回看之前的记录。',
@@ -231,7 +349,12 @@ class _HomeScreenState extends State<HomeScreen> {
                           Color(0xFFF9FCFF),
                           Color(0xFFE7ECFF),
                         ],
-                        onTap: openContainer,
+                        contentOpacity: _homeCardsOpacity,
+                        onTap: () => _openFromCard(
+                          cardKey: _browseCardKey,
+                          startRadius: 36,
+                          pageBuilder: (_) => BrowseNotesScreen(store: widget.store),
+                        ),
                       ),
                     ),
                   ),
@@ -256,13 +379,28 @@ class CreateNoteScreen extends StatefulWidget {
 
 class _CreateNoteScreenState extends State<CreateNoteScreen> {
   late final TextEditingController _controller;
+  late final FocusNode _editorFocusNode;
   String _group = NotesStore.defaultGroup;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController();
+    _editorFocusNode = FocusNode();
     _controller.addListener(_onChanged);
+
+    Future<void>.delayed(
+      kHomeCardControlsDelay + kDetailRevealDuration,
+      () {
+        if (!mounted) {
+          return;
+        }
+        if (ModalRoute.of(context)?.isCurrent != true) {
+          return;
+        }
+        _editorFocusNode.requestFocus();
+      },
+    );
   }
 
   @override
@@ -270,6 +408,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
     _controller
       ..removeListener(_onChanged)
       ..dispose();
+    _editorFocusNode.dispose();
     super.dispose();
   }
 
@@ -368,7 +507,8 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                 padding: EdgeInsets.zero,
                 child: TextField(
                   controller: _controller,
-                  autofocus: true,
+                  focusNode: _editorFocusNode,
+                  autofocus: false,
                   maxLines: null,
                   expands: true,
                   textCapitalization: TextCapitalization.sentences,
@@ -411,6 +551,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
   late final TextEditingController _searchController;
   String _selectedGroup = NotesStore.allGroupsLabel;
   bool _groupsExpanded = false;
+  double _noteCardTextOpacity = 1;
 
   @override
   void initState() {
@@ -437,6 +578,59 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
     setState(() {
       _selectedGroup = group;
       _groupsExpanded = false;
+    });
+  }
+
+  Rect? _cardRect(GlobalKey key) {
+    final context = key.currentContext;
+    if (context == null) {
+      return null;
+    }
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.hasSize) {
+      return null;
+    }
+    return box.localToGlobal(Offset.zero) & box.size;
+  }
+
+  Future<void> _openNoteFromCard(NoteItem note, GlobalKey cardKey) async {
+    final startRect = _cardRect(cardKey);
+    if (startRect == null || !mounted) {
+      return;
+    }
+
+    setState(() {
+      _noteCardTextOpacity = 0;
+    });
+
+    await Navigator.of(context).push(
+      _CardExpandRoute<void>(
+        startRect: startRect,
+        startRadius: 30,
+        child: DeferredDetailContent(
+          delay: kHomeCardControlsDelay,
+          builder: (_) => NoteEditorScreen(
+            store: widget.store,
+            noteId: note.id,
+          ),
+        ),
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+    if (!widget.store.browseGroups.contains(_selectedGroup)) {
+      _selectedGroup = NotesStore.allGroupsLabel;
+    }
+    setState(() {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _noteCardTextOpacity = 1;
+      });
     });
   }
 
@@ -729,34 +923,15 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                       itemCount: notes.length,
                       itemBuilder: (context, index) {
                         final note = notes[index];
-                        return OpenContainer<void>(
-                          transitionType: ContainerTransitionType.fadeThrough,
-                          transitionDuration: const Duration(milliseconds: 400),
-                          closedElevation: 0,
-                          openElevation: 0,
-                          closedColor: Colors.transparent,
-                          openColor: kOpenTransitionBackdrop,
-                          middleColor: kOpenTransitionBackdrop,
-                          closedShape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          onClosed: (_) {
-                            if (!mounted) return;
-                            if (!widget.store.browseGroups.contains(_selectedGroup)) {
-                              _selectedGroup = NotesStore.allGroupsLabel;
-                            }
-                            setState(() {});
-                          },
-                          openBuilder: (context, _) => DeferredDetailContent(
-                            builder: (_) => NoteEditorScreen(
-                              store: widget.store,
-                              noteId: note.id,
-                            ),
-                          ),
-                          closedBuilder: (context, openContainer) => NoteCard(
+                        final noteCardKey = GlobalKey();
+
+                        return KeyedSubtree(
+                          key: noteCardKey,
+                          child: NoteCard(
                             note: note,
-                            onTap: openContainer,
+                            onTap: () => _openNoteFromCard(note, noteCardKey),
                             onLongPress: () => _showCardActions(note),
+                            contentOpacity: _noteCardTextOpacity,
                           ),
                         );
                       },
@@ -1197,6 +1372,7 @@ class HeroActionCard extends StatelessWidget {
     required this.icon,
     required this.gradient,
     required this.onTap,
+    this.contentOpacity = 1,
   });
 
   final String indexLabel;
@@ -1206,6 +1382,7 @@ class HeroActionCard extends StatelessWidget {
   final IconData icon;
   final List<Color> gradient;
   final VoidCallback onTap;
+  final double contentOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -1226,66 +1403,71 @@ class HeroActionCard extends StatelessWidget {
             ),
           ),
           padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 42,
-                    height: 42,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.72),
-                      borderRadius: BorderRadius.circular(21),
-                    ),
-                    child: Center(
-                      child: Text(
-                        indexLabel,
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: AppColors.textPrimary,
-                              fontWeight: FontWeight.w700,
-                            ),
+          child: AnimatedOpacity(
+            opacity: contentOpacity,
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.72),
+                        borderRadius: BorderRadius.circular(21),
+                      ),
+                      child: Center(
+                        child: Text(
+                          indexLabel,
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: AppColors.textPrimary,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
                       ),
                     ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    width: 52,
-                    height: 52,
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.58),
-                      borderRadius: BorderRadius.circular(26),
+                    const Spacer(),
+                    Container(
+                      width: 52,
+                      height: 52,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.58),
+                        borderRadius: BorderRadius.circular(26),
+                      ),
+                      child: Icon(icon, color: AppColors.textPrimary, size: 26),
                     ),
-                    child: Icon(icon, color: AppColors.textPrimary, size: 26),
-                  ),
-                ],
-              ),
-              const Spacer(),
-              Text(
-                title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: -0.5,
-                    ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                subtitle,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                      color: AppColors.textSecondary,
-                      height: 1.45,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              Text(
-                meta,
-                style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: AppColors.textSecondary,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ],
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                        color: AppColors.textSecondary,
+                        height: 1.45,
+                      ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  meta,
+                  style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -1681,7 +1863,7 @@ class _SwipeGroupRowState extends State<SwipeGroupRow>
               child: Align(
                 alignment: Alignment.centerRight,
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 3),
+                  padding: const EdgeInsets.only(right: 1),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1698,7 +1880,7 @@ class _SwipeGroupRowState extends State<SwipeGroupRow>
                           widget.onRename();
                         },
                       ),
-                      const SizedBox(width: 10),
+                      const SizedBox(width: 6),
                       _SwipeActionButton(
                         icon: CupertinoIcons.trash,
                         label: '删除',
@@ -1789,14 +1971,6 @@ class _SwipeActionButton extends StatelessWidget {
           border: Border.all(
             color: Colors.white.withValues(alpha: 0.58),
           ),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x140A1A28),
-              blurRadius: 12,
-              spreadRadius: -2,
-              offset: Offset(0, 8),
-            ),
-          ],
         ),
         child: Material(
           color: Colors.transparent,
@@ -1834,11 +2008,13 @@ class NoteCard extends StatelessWidget {
     required this.note,
     required this.onTap,
     required this.onLongPress,
+    this.contentOpacity = 1,
   });
 
   final NoteItem note;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final double contentOpacity;
 
   @override
   Widget build(BuildContext context) {
@@ -1866,56 +2042,61 @@ class NoteCard extends StatelessWidget {
               borderRadius: BorderRadius.circular(30),
             ),
             padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
-            child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
+            child: AnimatedOpacity(
+              opacity: contentOpacity,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          note.group,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                color: AppColors.textSecondary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                      const Icon(
+                        CupertinoIcons.ellipsis,
+                        size: 18,
+                        color: AppColors.textMuted,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
                   Expanded(
                     child: Text(
-                      note.group,
-                      maxLines: 1,
+                      note.preview,
+                      maxLines: 7,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            color: AppColors.textPrimary,
+                            fontSize: 18,
+                            height: 1.48,
+                            fontWeight: FontWeight.w500,
                           ),
                     ),
                   ),
-                  const Icon(
-                    CupertinoIcons.ellipsis,
-                    size: 18,
-                    color: AppColors.textMuted,
+                  const SizedBox(height: 14),
+                  Text(
+                    AppDateFormatter.dateTime(note.updatedAt),
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                          color: AppColors.textMuted,
+                          fontWeight: FontWeight.w600,
+                        ),
                   ),
                 ],
               ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: Text(
-                  note.preview,
-                  maxLines: 7,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontSize: 18,
-                        height: 1.48,
-                        fontWeight: FontWeight.w500,
-                      ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              Text(
-                AppDateFormatter.dateTime(note.updatedAt),
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w600,
-                    ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
