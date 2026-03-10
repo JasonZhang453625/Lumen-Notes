@@ -154,22 +154,33 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
                        ),
                      ),
                    ),
-                   Positioned.fromRect(
-                     rect: rect,
-                     child: IgnorePointer(
-                       ignoring: animation.status != AnimationStatus.completed,
-                       child: ClipRRect(
-                         borderRadius: BorderRadius.circular(radius),
-                         child: ColoredBox(
-                           color: kOpenTransitionBackdrop,
-                           child: Opacity(
-                             opacity: childOpacity,
-                             child: child,
-                           ),
-                         ),
-                       ),
-                     ),
-                   ),
+                  Positioned.fromRect(
+                    rect: rect,
+                    child: IgnorePointer(
+                      ignoring: animation.status != AnimationStatus.completed,
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(radius),
+                        child: ColoredBox(
+                          color: kOpenTransitionBackdrop,
+                          child: OverflowBox(
+                            alignment: Alignment.topLeft,
+                            minWidth: endRect.width,
+                            maxWidth: endRect.width,
+                            minHeight: endRect.height,
+                            maxHeight: endRect.height,
+                            child: SizedBox(
+                              width: endRect.width,
+                              height: endRect.height,
+                              child: Opacity(
+                                opacity: childOpacity,
+                                child: child,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                  ],
                );
              },
