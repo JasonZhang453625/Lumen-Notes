@@ -730,7 +730,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 10),
             GlassPanel(
               padding: const EdgeInsets.fromLTRB(14, 10, 14, 10),
               child: Column(
@@ -762,7 +762,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                                     .labelMedium
                                     ?.copyWith(color: AppColors.textSecondary),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 3),
                               Text(
                                 _selectedGroup,
                                 style: Theme.of(context)
@@ -1047,7 +1047,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               RepaintBoundary(
                 child: Row(
                   children: [
