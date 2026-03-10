@@ -1058,7 +1058,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 4),
               RepaintBoundary(
                 child: Row(
                   children: [
@@ -1087,8 +1087,9 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                           Text(
                             AppDateFormatter.dateOnly(_note.createdAt),
                             style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontSize: 14,
                                   color: AppColors.textPrimary,
-                                  fontWeight: FontWeight.w600,
+                                  fontWeight: FontWeight.w400,
                                 ),
                           ),
                         ],
@@ -1266,8 +1267,8 @@ class EditorTextSurface extends StatelessWidget {
               expands: true,
               textCapitalization: textCapitalization,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 20,
-                    height: 1.55,
+                    fontSize: 19,
+                    height: 1.35,
                     color: AppColors.textPrimary,
                     fontWeight: FontWeight.w500,
                   ),
