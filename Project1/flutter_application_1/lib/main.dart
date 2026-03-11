@@ -8,9 +8,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 const double kGroupActionWidth = 92;
 const Color kOpenTransitionBackdrop = Color(0xFFF1F6FA);
 const Duration kDeferredDetailDelay = Duration(milliseconds: 120);
-const Duration kHomeCardExpandDuration = Duration(milliseconds: 760);
-const Duration kHomeCardControlsDelay = kHomeCardExpandDuration;
-const Duration kDetailRevealDuration = Duration(milliseconds: 420);
+const Duration kHomeCardExpandDuration = Duration(milliseconds: 680);
+const Duration kHomeCardControlsDelay = Duration(milliseconds: 170);
+const Duration kDetailRevealDuration = Duration(milliseconds: 320);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -89,7 +89,7 @@ class _DeferredDetailContentState extends State<DeferredDetailContent> {
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
       duration: kDetailRevealDuration,
-      curve: const Cubic(0.2, 0.88, 0.3, 1.0),
+      curve: const Cubic(0.2, 0.96, 0.3, 1.0),
       child: Builder(builder: widget.builder),
       builder: (context, value, child) {
         return Opacity(
@@ -143,7 +143,7 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
                final rect = Rect.lerp(startRect, endRect, progress.value)!;
                final radius = lerpDouble(startRadius, 28, progress.value)!;
                final showOpacity = Curves.easeOutCubic.transform(
-                 ((animation.value - 0.58) / 0.42).clamp(0.0, 1.0),
+                 ((animation.value - 0.32) / 0.68).clamp(0.0, 1.0),
                );
                final hideOpacity = ((animation.value - 0.78) / 0.22).clamp(
                  0.0,
