@@ -24,6 +24,16 @@ String compactText(String raw) {
   return raw.replaceAll(RegExp(r'\s+'), ' ').trim();
 }
 
+String deriveNoteTitle(String content) {
+  for (final line in content.split('\n')) {
+    final candidate = compactText(line);
+    if (candidate.isNotEmpty) {
+      return candidate;
+    }
+  }
+  return '';
+}
+
 Future<void> popAfterKeyboardSettles(BuildContext context) async {
   FocusManager.instance.primaryFocus?.unfocus();
   for (var i = 0; i < 18; i++) {
@@ -79,17 +89,14 @@ class _DeferredDetailContentState extends State<DeferredDetailContent> {
     return TweenAnimationBuilder<double>(
       tween: Tween<double>(begin: 0, end: 1),
       duration: kDetailRevealDuration,
-      curve: Curves.easeOutBack,
+      curve: const Cubic(0.2, 0.88, 0.3, 1.0),
       child: Builder(builder: widget.builder),
       builder: (context, value, child) {
         return Opacity(
           opacity: value.clamp(0, 1),
           child: Transform.translate(
             offset: Offset(0, (1 - value) * 22),
-            child: Transform.scale(
-              scale: 0.96 + (0.04 * value),
-              child: child,
-            ),
+            child: Transform.scale(scale: 0.96 + (0.04 * value), child: child),
           ),
         );
       },
@@ -120,7 +127,7 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
          transitionsBuilder: (context, animation, secondaryAnimation, child) {
            final progress = CurvedAnimation(
              parent: animation,
-             curve: const Cubic(0.2, 0.86, 0.22, 1.0),
+             curve: const Cubic(0.16, 0.96, 0.28, 1.0),
              reverseCurve: const Cubic(0.32, 0.0, 0.67, 0.0),
            );
            final dim = CurvedAnimation(
@@ -138,8 +145,10 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
                final showOpacity = Curves.easeOutCubic.transform(
                  ((animation.value - 0.58) / 0.42).clamp(0.0, 1.0),
                );
-               final hideOpacity =
-                   ((animation.value - 0.78) / 0.22).clamp(0.0, 1.0);
+               final hideOpacity = ((animation.value - 0.78) / 0.22).clamp(
+                 0.0,
+                 1.0,
+               );
                final childOpacity = animation.status == AnimationStatus.reverse
                    ? hideOpacity
                    : showOpacity;
@@ -150,37 +159,39 @@ class _CardExpandRoute<T> extends PageRouteBuilder<T> {
                    Positioned.fill(
                      child: IgnorePointer(
                        child: ColoredBox(
-                         color: Colors.black.withValues(alpha: 0.18 * dim.value),
+                         color: Colors.black.withValues(
+                           alpha: 0.18 * dim.value,
+                         ),
                        ),
                      ),
                    ),
-                  Positioned.fromRect(
-                    rect: rect,
-                    child: IgnorePointer(
-                      ignoring: animation.status != AnimationStatus.completed,
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(radius),
-                        child: ColoredBox(
-                          color: kOpenTransitionBackdrop,
-                          child: OverflowBox(
-                            alignment: Alignment.topLeft,
-                            minWidth: endRect.width,
-                            maxWidth: endRect.width,
-                            minHeight: endRect.height,
-                            maxHeight: endRect.height,
-                            child: SizedBox(
-                              width: endRect.width,
-                              height: endRect.height,
-                              child: Opacity(
-                                opacity: childOpacity,
-                                child: child,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
+                   Positioned.fromRect(
+                     rect: rect,
+                     child: IgnorePointer(
+                       ignoring: animation.status != AnimationStatus.completed,
+                       child: ClipRRect(
+                         borderRadius: BorderRadius.circular(radius),
+                         child: ColoredBox(
+                           color: kOpenTransitionBackdrop,
+                           child: OverflowBox(
+                             alignment: Alignment.topLeft,
+                             minWidth: endRect.width,
+                             maxWidth: endRect.width,
+                             minHeight: endRect.height,
+                             maxHeight: endRect.height,
+                             child: SizedBox(
+                               width: endRect.width,
+                               height: endRect.height,
+                               child: Opacity(
+                                 opacity: childOpacity,
+                                 child: child,
+                               ),
+                             ),
+                           ),
+                         ),
+                       ),
+                     ),
+                   ),
                  ],
                );
              },
@@ -292,18 +303,18 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               'Lumen Notes',
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
-                    letterSpacing: -0.8,
-                  ),
+                fontWeight: FontWeight.w700,
+                color: AppColors.textPrimary,
+                letterSpacing: -0.8,
+              ),
             ),
             const SizedBox(height: 10),
             Text(
               '把单词、句子和灵感收进一个更轻的语言学习笔记本。',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  ),
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
             ),
             const SizedBox(height: 24),
             Expanded(
@@ -318,15 +329,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         subtitle: '快速记录句子、单词、短语或任意学习内容。',
                         meta: '当前共 ${widget.store.notes.length} 条笔记',
                         icon: CupertinoIcons.plus_circle_fill,
-                        gradient: const [
-                          Color(0xFFF8FDFF),
-                          Color(0xFFDFF3F9),
-                        ],
+                        gradient: const [Color(0xFFF8FDFF), Color(0xFFDFF3F9)],
                         contentOpacity: _homeCardsOpacity,
                         onTap: () => _openFromCard(
                           cardKey: _createCardKey,
                           startRadius: 36,
-                          pageBuilder: (_) => CreateNoteScreen(store: widget.store),
+                          pageBuilder: (_) =>
+                              CreateNoteScreen(store: widget.store),
                         ),
                       ),
                     ),
@@ -339,17 +348,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         indexLabel: 'B',
                         title: '阅览笔记',
                         subtitle: '按分组与搜索快速回看之前的记录。',
-                        meta: '最近更新 ${AppDateFormatter.dateTime(widget.store.latestUpdatedAt)}',
+                        meta:
+                            '最近更新 ${AppDateFormatter.dateTime(widget.store.latestUpdatedAt)}',
                         icon: CupertinoIcons.rectangle_grid_2x2_fill,
-                        gradient: const [
-                          Color(0xFFF9FCFF),
-                          Color(0xFFE7ECFF),
-                        ],
+                        gradient: const [Color(0xFFF9FCFF), Color(0xFFE7ECFF)],
                         contentOpacity: _homeCardsOpacity,
                         onTap: () => _openFromCard(
                           cardKey: _browseCardKey,
                           startRadius: 36,
-                          pageBuilder: (_) => BrowseNotesScreen(store: widget.store),
+                          pageBuilder: (_) =>
+                              BrowseNotesScreen(store: widget.store),
                         ),
                       ),
                     ),
@@ -398,11 +406,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
 
   Future<void> _pickGroup() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final picked = await pickGroup(
-      context,
-      widget.store,
-      initialGroup: _group,
-    );
+    final picked = await pickGroup(context, widget.store, initialGroup: _group);
     if (picked == null || !mounted) {
       return;
     }
@@ -451,10 +455,7 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
               child: Row(
                 children: [
                   Expanded(
-                    child: GroupPill(
-                      label: _group,
-                      onTap: _pickGroup,
-                    ),
+                    child: GroupPill(label: _group, onTap: _pickGroup),
                   ),
                   const SizedBox(width: 12),
                   GlassPanel(
@@ -470,14 +471,14 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
                           children: [
                             Text(
                               '状态',
-                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                    color: AppColors.textSecondary,
-                                  ),
+                              style: Theme.of(context).textTheme.labelMedium
+                                  ?.copyWith(color: AppColors.textSecondary),
                             ),
                             const SizedBox(height: 4),
                             Text(
                               value.text.trim().isEmpty ? '未填写' : '可保存',
-                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              style: Theme.of(context).textTheme.titleSmall
+                                  ?.copyWith(
                                     color: AppColors.textPrimary,
                                     fontWeight: FontWeight.w600,
                                   ),
@@ -556,7 +557,10 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
     return box.localToGlobal(Offset.zero) & box.size;
   }
 
-  Future<void> _openNoteFromCard(NoteItem note, BuildContext cardContext) async {
+  Future<void> _openNoteFromCard(
+    NoteItem note,
+    BuildContext cardContext,
+  ) async {
     final startRect = _cardRect(cardContext);
     if (startRect == null || !mounted) {
       return;
@@ -568,10 +572,8 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
         startRadius: 30,
         child: DeferredDetailContent(
           delay: kHomeCardControlsDelay,
-          builder: (_) => NoteEditorScreen(
-            store: widget.store,
-            noteId: note.id,
-          ),
+          builder: (_) =>
+              NoteEditorScreen(store: widget.store, noteId: note.id),
         ),
       ),
     );
@@ -584,6 +586,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
     }
     setState(() {});
   }
+
   Future<void> _showCardActions(NoteItem note) async {
     final action = await showModalBottomSheet<_CardAction>(
       context: context,
@@ -698,9 +701,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const DetailHeader(
-              title: '阅览笔记',
-            ),
+            const DetailHeader(title: '阅览笔记'),
             const SizedBox(height: 18),
             GlassPanel(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
@@ -716,8 +717,8 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                     child: TextField(
                       controller: _searchController,
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: AppColors.textPrimary,
-                          ),
+                        color: AppColors.textPrimary,
+                      ),
                       decoration: const InputDecoration(
                         isDense: true,
                         border: InputBorder.none,
@@ -768,17 +769,13 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                             children: [
                               Text(
                                 '当前分组',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .labelMedium
+                                style: Theme.of(context).textTheme.labelMedium
                                     ?.copyWith(color: AppColors.textSecondary),
                               ),
                               const SizedBox(height: 3),
                               Text(
                                 _selectedGroup,
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleMedium
+                                style: Theme.of(context).textTheme.titleMedium
                                     ?.copyWith(
                                       color: AppColors.textPrimary,
                                       fontWeight: FontWeight.w700,
@@ -789,7 +786,8 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                         ),
                         Text(
                           '${widget.store.groupCount(_selectedGroup)}',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
                                 color: AppColors.textSecondary,
                                 fontWeight: FontWeight.w600,
                               ),
@@ -813,7 +811,10 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                     crossFadeState: _groupsExpanded
                         ? CrossFadeState.showSecond
                         : CrossFadeState.showFirst,
-                    firstChild: const SizedBox(width: double.infinity, height: 0),
+                    firstChild: const SizedBox(
+                      width: double.infinity,
+                      height: 0,
+                    ),
                     secondChild: Column(
                       children: [
                         const SizedBox(height: 14),
@@ -825,20 +826,28 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                               children: groups
                                   .map(
                                     (group) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
+                                      padding: const EdgeInsets.only(
+                                        bottom: 10,
+                                      ),
                                       child: widget.store.isCustomGroup(group)
                                           ? SwipeGroupRow(
                                               key: ValueKey(group),
                                               label: group,
-                                              count: widget.store.groupCount(group),
+                                              count: widget.store.groupCount(
+                                                group,
+                                              ),
                                               selected: _selectedGroup == group,
                                               onTap: () => _selectGroup(group),
-                                              onRename: () => _renameGroup(group),
-                                              onDelete: () => _deleteGroup(group),
+                                              onRename: () =>
+                                                  _renameGroup(group),
+                                              onDelete: () =>
+                                                  _deleteGroup(group),
                                             )
                                           : GroupRowButton(
                                               label: group,
-                                              count: widget.store.groupCount(group),
+                                              count: widget.store.groupCount(
+                                                group,
+                                              ),
                                               selected: _selectedGroup == group,
                                               onTap: () => _selectGroup(group),
                                             ),
@@ -868,12 +877,13 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
                       padding: EdgeInsets.only(bottom: bottomSafeInset + 18),
                       keyboardDismissBehavior:
                           ScrollViewKeyboardDismissBehavior.onDrag,
-                      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                        maxCrossAxisExtent: 280,
-                        mainAxisSpacing: 14,
-                        crossAxisSpacing: 14,
-                        childAspectRatio: 0.88,
-                      ),
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 280,
+                            mainAxisSpacing: 14,
+                            crossAxisSpacing: 14,
+                            childAspectRatio: 0.88,
+                          ),
                       itemCount: notes.length,
                       itemBuilder: (context, index) {
                         final note = notes[index];
@@ -896,7 +906,11 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
 }
 
 class NoteEditorScreen extends StatefulWidget {
-  const NoteEditorScreen({super.key, required this.store, required this.noteId});
+  const NoteEditorScreen({
+    super.key,
+    required this.store,
+    required this.noteId,
+  });
 
   final NotesStore store;
   final String noteId;
@@ -906,6 +920,7 @@ class NoteEditorScreen extends StatefulWidget {
 }
 
 class _NoteEditorScreenState extends State<NoteEditorScreen> {
+  late final TextEditingController _titleController;
   late final TextEditingController _controller;
   late NoteItem _note;
   late String _group;
@@ -919,28 +934,29 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     }
     _note = note;
     _group = note.group;
+    _titleController = TextEditingController(text: note.title);
     _controller = TextEditingController(text: note.content);
   }
 
   @override
   void dispose() {
+    _titleController.dispose();
     _controller.dispose();
     super.dispose();
   }
 
-  bool _hasChangesForText(String text) {
-    return text.trim() != _note.content.trim() || _group != _note.group;
+  bool _hasChangesForText(String title, String text) {
+    return compactText(title) != _note.title ||
+        text.trim() != _note.content.trim() ||
+        _group != _note.group;
   }
 
-  bool get _hasPendingChanges => _hasChangesForText(_controller.text);
+  bool get _hasPendingChanges =>
+      _hasChangesForText(_titleController.text, _controller.text);
 
   Future<void> _pickGroup() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final picked = await pickGroup(
-      context,
-      widget.store,
-      initialGroup: _group,
-    );
+    final picked = await pickGroup(context, widget.store, initialGroup: _group);
     if (picked == null || !mounted) {
       return;
     }
@@ -956,6 +972,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
     }
     await widget.store.updateNote(
       _note.id,
+      title: _titleController.text,
       content: content,
       group: _group,
     );
@@ -1035,11 +1052,34 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 title: '阅读与编辑',
                 subtitle: '${AppDateFormatter.dateTime(_note.updatedAt)}编辑',
                 onBack: () => _onWillPop(_hasPendingChanges),
-                trailing: ValueListenableBuilder<TextEditingValue>(
-                  valueListenable: _controller,
-                  builder: (context, value, _) {
-                    final changed = _hasChangesForText(value.text);
-                    final canSave = changed && value.text.trim().isNotEmpty;
+                titleWidget: TextField(
+                  controller: _titleController,
+                  maxLines: 1,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    isCollapsed: true,
+                    border: InputBorder.none,
+                    hintText: '输入笔记标题',
+                    hintStyle: TextStyle(
+                      color: AppColors.textMuted,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+                trailing: AnimatedBuilder(
+                  animation: Listenable.merge([_titleController, _controller]),
+                  builder: (context, _) {
+                    final changed = _hasChangesForText(
+                      _titleController.text,
+                      _controller.text,
+                    );
+                    final canSave =
+                        changed && _controller.text.trim().isNotEmpty;
                     return Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -1063,10 +1103,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                 child: Row(
                   children: [
                     Expanded(
-                      child: GroupPill(
-                        label: _group,
-                        onTap: _pickGroup,
-                      ),
+                      child: GroupPill(label: _group, onTap: _pickGroup),
                     ),
                     const SizedBox(width: 12),
                     GlassPanel(
@@ -1079,14 +1116,14 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                         children: [
                           Text(
                             '创建于',
-                            style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                                  color: AppColors.textSecondary,
-                                ),
+                            style: Theme.of(context).textTheme.labelMedium
+                                ?.copyWith(color: AppColors.textSecondary),
                           ),
                           const SizedBox(height: 2),
                           Text(
                             AppDateFormatter.dateOnly(_note.createdAt),
-                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            style: Theme.of(context).textTheme.titleSmall
+                                ?.copyWith(
                                   fontSize: 14,
                                   color: AppColors.textPrimary,
                                   fontWeight: FontWeight.w400,
@@ -1129,14 +1166,13 @@ class AppScaffold extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final safeBody = SafeArea(
-      bottom: safeAreaBottom,
-      child: child,
-    );
+    final safeBody = SafeArea(bottom: safeAreaBottom, child: child);
 
     return Scaffold(
       resizeToAvoidBottomInset: resizeToAvoidBottomInset,
-      backgroundColor: withPageBackdrop ? kOpenTransitionBackdrop : Colors.transparent,
+      backgroundColor: withPageBackdrop
+          ? kOpenTransitionBackdrop
+          : Colors.transparent,
       body: withPageBackdrop
           ? Stack(
               children: [
@@ -1161,11 +1197,7 @@ class GradientBackdropLayer extends StatelessWidget {
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFF5F7FA),
-            Color(0xFFEFF3F7),
-            Color(0xFFF8FAFC),
-          ],
+          colors: [Color(0xFFF5F7FA), Color(0xFFEFF3F7), Color(0xFFF8FAFC)],
         ),
       ),
     );
@@ -1189,7 +1221,6 @@ class GradientBackdrop extends StatelessWidget {
   }
 }
 
-
 class GlassPanel extends StatelessWidget {
   const GlassPanel({
     super.key,
@@ -1212,10 +1243,7 @@ class GlassPanel extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(radius),
         color: const Color(0xFFF1F5F8),
-        border: Border.all(
-          color: const Color(0xFFDCE4EA),
-          width: 1,
-        ),
+        border: Border.all(color: const Color(0xFFDCE4EA), width: 1),
         boxShadow: const [
           BoxShadow(
             color: Color(0x0E0A1A28),
@@ -1267,11 +1295,11 @@ class EditorTextSurface extends StatelessWidget {
               expands: true,
               textCapitalization: textCapitalization,
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontSize: 19,
-                    height: 1.35,
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w500,
-                  ),
+                fontSize: 19,
+                height: 1.35,
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w500,
+              ),
               decoration: InputDecoration(
                 border: InputBorder.none,
                 isCollapsed: true,
@@ -1289,6 +1317,7 @@ class EditorTextSurface extends StatelessWidget {
     );
   }
 }
+
 class HeroActionCard extends StatelessWidget {
   const HeroActionCard({
     super.key,
@@ -1321,6 +1350,7 @@ class HeroActionCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(36),
+            border: Border.all(color: const Color(0xFFCCD4DC), width: 1),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -1347,7 +1377,8 @@ class HeroActionCard extends StatelessWidget {
                       child: Center(
                         child: Text(
                           indexLabel,
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(
                                 color: AppColors.textPrimary,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -1370,26 +1401,26 @@ class HeroActionCard extends StatelessWidget {
                 Text(
                   title,
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.5,
-                      ),
+                    color: AppColors.textPrimary,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   subtitle,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        color: AppColors.textSecondary,
-                        height: 1.45,
-                      ),
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  ),
                 ),
                 const SizedBox(height: 16),
                 Text(
                   meta,
                   style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppColors.textSecondary,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -1400,17 +1431,18 @@ class HeroActionCard extends StatelessWidget {
   }
 }
 
-
 class DetailHeader extends StatelessWidget {
   const DetailHeader({
     super.key,
-    required this.title,
+    this.title,
+    this.titleWidget,
     this.subtitle,
     this.trailing,
     this.onBack,
-  });
+  }) : assert(title != null || titleWidget != null);
 
-  final String title;
+  final String? title;
+  final Widget? titleWidget;
   final String? subtitle;
   final Widget? trailing;
   final VoidCallback? onBack;
@@ -1428,27 +1460,28 @@ class DetailHeader extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              titleWidget ??
+                  Text(
+                    title!,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                       color: AppColors.textPrimary,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.5,
                     ),
-              ),
+                  ),
               if (subtitle != null) ...[
                 const SizedBox(height: 4),
                 Text(
                   subtitle!,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                      ),
+                    color: AppColors.textSecondary,
+                  ),
                 ),
               ],
             ],
           ),
         ),
-        ...? (trailing == null ? null : [trailing!]),
+        ...?(trailing == null ? null : [trailing!]),
       ],
     );
   }
@@ -1468,7 +1501,9 @@ class HeaderButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = destructive ? AppColors.destructive : AppColors.textPrimary;
+    final foreground = destructive
+        ? AppColors.destructive
+        : AppColors.textPrimary;
     final disabled = onTap == null;
 
     return Opacity(
@@ -1485,10 +1520,7 @@ class HeaderButton extends StatelessWidget {
             decoration: BoxDecoration(
               color: const Color(0xFFF1F5F8),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(
-                color: const Color(0xFFDCE4EA),
-                width: 1,
-              ),
+              border: Border.all(color: const Color(0xFFDCE4EA), width: 1),
             ),
             child: Icon(icon, size: 20, color: foreground),
           ),
@@ -1531,35 +1563,35 @@ class GroupPill extends StatelessWidget {
               borderRadius: BorderRadius.circular(22),
             ),
             child: Row(
-            children: [
-              const Icon(
-                CupertinoIcons.collections,
-                size: 18,
-                color: AppColors.textSecondary,
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontWeight: FontWeight.w600,
-                      ),
+              children: [
+                const Icon(
+                  CupertinoIcons.collections,
+                  size: 18,
+                  color: AppColors.textSecondary,
                 ),
-              ),
-              const SizedBox(width: 10),
-              const Icon(
-                CupertinoIcons.chevron_down,
-                size: 18,
-                color: AppColors.textSecondary,
-              ),
-            ],
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: AppColors.textPrimary,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                const Icon(
+                  CupertinoIcons.chevron_down,
+                  size: 18,
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
           ),
         ),
       ),
-    ),
     );
   }
 }
@@ -1606,7 +1638,9 @@ class GroupRowButton extends StatelessWidget {
             decoration: BoxDecoration(
               borderRadius: radius,
               border: Border.all(
-                color: selected ? const Color(0xFFD3EAF4) : const Color(0xD6D9E2E8),
+                color: selected
+                    ? const Color(0xFFD3EAF4)
+                    : const Color(0xD6D9E2E8),
                 width: 1,
               ),
             ),
@@ -1618,20 +1652,20 @@ class GroupRowButton extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: AppColors.textPrimary,
-                          fontSize: 13,
-                          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                        ),
+                      color: AppColors.textPrimary,
+                      fontSize: 13,
+                      fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
                 Text(
                   '$count',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: AppColors.textSecondary,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -1744,7 +1778,8 @@ class _SwipeGroupRowState extends State<SwipeGroupRow>
 
   void _settle(double velocity) {
     final progress = (_offset.abs() / _maxReveal).clamp(0.0, 1.0);
-    final shouldOpen = velocity < -70 || progress > 0.18 || (velocity < -20 && progress > 0.1);
+    final shouldOpen =
+        velocity < -70 || progress > 0.18 || (velocity < -20 && progress > 0.1);
 
     if (shouldOpen) {
       _open();
@@ -1773,10 +1808,7 @@ class _SwipeGroupRowState extends State<SwipeGroupRow>
                       _SwipeActionButton(
                         icon: CupertinoIcons.pencil,
                         label: '编辑',
-                        gradient: const [
-                          Color(0xFFD6EFF8),
-                          Color(0xFFB5DCEC),
-                        ],
+                        gradient: const [Color(0xFFD6EFF8), Color(0xFFB5DCEC)],
                         foregroundColor: const Color(0xFF234B5A),
                         onTap: () {
                           _close();
@@ -1787,10 +1819,7 @@ class _SwipeGroupRowState extends State<SwipeGroupRow>
                       _SwipeActionButton(
                         icon: CupertinoIcons.trash,
                         label: '删除',
-                        gradient: const [
-                          Color(0xFFF9CFD1),
-                          Color(0xFFF3B3B3),
-                        ],
+                        gradient: const [Color(0xFFF9CFD1), Color(0xFFF3B3B3)],
                         foregroundColor: const Color(0xFF7B2121),
                         onTap: () {
                           _close();
@@ -1871,9 +1900,7 @@ class _SwipeActionButton extends StatelessWidget {
             end: Alignment.bottomCenter,
             colors: gradient,
           ),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: 0.58),
-          ),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.58)),
         ),
         child: Material(
           color: Colors.transparent,
@@ -1890,10 +1917,10 @@ class _SwipeActionButton extends StatelessWidget {
                   Text(
                     label,
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: foregroundColor,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.1,
-                        ),
+                      color: foregroundColor,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.1,
+                    ),
                   ),
                 ],
               ),
@@ -1928,7 +1955,7 @@ class NoteCard extends StatelessWidget {
         onLongPress: onLongPress,
         child: Container(
           decoration: BoxDecoration(
-            border: Border.all(color: const Color(0xB8FFFFFF)),
+            border: Border.all(color: const Color(0xFFCCD4DC), width: 1),
             borderRadius: BorderRadius.circular(30),
           ),
           padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
@@ -1943,9 +1970,9 @@ class NoteCard extends StatelessWidget {
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                            color: AppColors.textSecondary,
-                            fontWeight: FontWeight.w600,
-                          ),
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
                   const Icon(
@@ -1962,20 +1989,20 @@ class NoteCard extends StatelessWidget {
                   maxLines: 7,
                   overflow: TextOverflow.ellipsis,
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: AppColors.textPrimary,
-                        fontSize: 18,
-                        height: 1.48,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    color: AppColors.textPrimary,
+                    fontSize: 18,
+                    height: 1.48,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
               ),
               const SizedBox(height: 14),
               Text(
                 AppDateFormatter.dateTime(note.updatedAt),
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: AppColors.textMuted,
-                      fontWeight: FontWeight.w600,
-                    ),
+                  color: AppColors.textMuted,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -2020,18 +2047,18 @@ class EmptyNotesState extends StatelessWidget {
             Text(
               hasQuery ? '没有找到匹配结果' : '这个分组还没有笔记',
               style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
             const SizedBox(height: 8),
             Text(
               hasQuery ? '试试更短的关键词，或者切换到其他分组。' : '当前分组：$group',
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: AppColors.textSecondary,
-                    height: 1.45,
-                  ),
+                color: AppColors.textSecondary,
+                height: 1.45,
+              ),
             ),
           ],
         ),
@@ -2105,9 +2132,9 @@ class ActionTile extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -2208,16 +2235,16 @@ class _GroupPickerSheetState extends State<_GroupPickerSheet> {
           Text(
             '选择分组',
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  color: AppColors.textPrimary,
-                  fontWeight: FontWeight.w700,
-                ),
+              color: AppColors.textPrimary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             '点已有分组，或输入一个新分组名。',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: AppColors.textSecondary,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.bodyMedium?.copyWith(color: AppColors.textSecondary),
           ),
           const SizedBox(height: 16),
           Flexible(
@@ -2231,7 +2258,9 @@ class _GroupPickerSheetState extends State<_GroupPickerSheet> {
                       child: GroupRowButton(
                         label: group,
                         count: widget.store.groupCount(group),
-                        selected: _selectedGroup == group && _controller.text.trim().isEmpty,
+                        selected:
+                            _selectedGroup == group &&
+                            _controller.text.trim().isEmpty,
                         onTap: () {
                           setState(() {
                             _selectedGroup = group;
@@ -2245,13 +2274,16 @@ class _GroupPickerSheetState extends State<_GroupPickerSheet> {
                   Text(
                     '新建分组',
                     style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                          color: AppColors.textSecondary,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: AppColors.textSecondary,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 10),
                   GlassPanel(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 8,
+                    ),
                     child: TextField(
                       controller: _controller,
                       textInputAction: TextInputAction.done,
@@ -2262,9 +2294,9 @@ class _GroupPickerSheetState extends State<_GroupPickerSheet> {
                         hintStyle: TextStyle(color: AppColors.textMuted),
                       ),
                       style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                            color: AppColors.textPrimary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                        color: AppColors.textPrimary,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                   ),
                 ],
@@ -2328,9 +2360,9 @@ class HeaderFooterButton extends StatelessWidget {
             child: Text(
               label,
               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: fg,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: fg,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ),
@@ -2352,9 +2384,7 @@ Future<String?> showGroupNameDialog(
         content: TextField(
           controller: controller,
           autofocus: true,
-          decoration: const InputDecoration(
-            hintText: '输入新的分组名',
-          ),
+          decoration: const InputDecoration(hintText: '输入新的分组名'),
         ),
         actions: [
           TextButton(
@@ -2396,7 +2426,9 @@ Future<bool?> showGroupDeleteDialog(
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.destructive,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: Text('删除 $groupName'),
           ),
@@ -2419,7 +2451,9 @@ Future<bool?> showDeleteDialog(BuildContext context) {
             child: const Text('取消'),
           ),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.destructive),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.destructive,
+            ),
             onPressed: () => Navigator.of(dialogContext).pop(true),
             child: const Text('删除'),
           ),
@@ -2432,6 +2466,7 @@ Future<bool?> showDeleteDialog(BuildContext context) {
 class NoteItem {
   const NoteItem({
     required this.id,
+    required this.title,
     required this.content,
     required this.createdAt,
     required this.updatedAt,
@@ -2439,6 +2474,7 @@ class NoteItem {
   });
 
   final String id;
+  final String title;
   final String content;
   final DateTime createdAt;
   final DateTime updatedAt;
@@ -2448,6 +2484,7 @@ class NoteItem {
 
   NoteItem copyWith({
     String? id,
+    String? title,
     String? content,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -2455,6 +2492,7 @@ class NoteItem {
   }) {
     return NoteItem(
       id: id ?? this.id,
+      title: title ?? this.title,
       content: content ?? this.content,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -2465,6 +2503,7 @@ class NoteItem {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
+      'title': title,
       'content': content,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -2473,9 +2512,12 @@ class NoteItem {
   }
 
   factory NoteItem.fromJson(Map<String, dynamic> json) {
+    final content = json['content'] as String? ?? '';
+    final title = compactText(json['title'] as String? ?? '');
     return NoteItem(
       id: json['id'] as String,
-      content: json['content'] as String? ?? '',
+      title: title.isEmpty ? deriveNoteTitle(content) : title,
+      content: content,
       createdAt: DateTime.parse(json['createdAt'] as String),
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       group: json['group'] as String? ?? NotesStore.defaultGroup,
@@ -2505,12 +2547,13 @@ class NotesStore extends ChangeNotifier {
   }
 
   List<String> get availableGroups {
-    final custom = _notes
-        .map((note) => note.group)
-        .where((group) => group != defaultGroup)
-        .toSet()
-        .toList()
-      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final custom =
+        _notes
+            .map((note) => note.group)
+            .where((group) => group != defaultGroup)
+            .toSet()
+            .toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     return <String>[defaultGroup, ...custom];
   }
 
@@ -2546,10 +2589,10 @@ class NotesStore extends ChangeNotifier {
       if (normalizedQuery.isEmpty) {
         return true;
       }
-      return note.content.toLowerCase().contains(normalizedQuery) ||
+      return note.title.toLowerCase().contains(normalizedQuery) ||
+          note.content.toLowerCase().contains(normalizedQuery) ||
           note.group.toLowerCase().contains(normalizedQuery);
-    }).toList()
-      ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+    }).toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
     return items;
   }
 
@@ -2569,16 +2612,26 @@ class NotesStore extends ChangeNotifier {
     }
 
     _notes = decoded
-        .map((item) => NoteItem.fromJson(Map<String, dynamic>.from(item as Map)))
+        .map(
+          (item) => NoteItem.fromJson(Map<String, dynamic>.from(item as Map)),
+        )
         .toList();
     notifyListeners();
   }
 
-  Future<void> addNote({required String content, required String group}) async {
+  Future<void> addNote({
+    required String content,
+    required String group,
+    String? title,
+  }) async {
     final now = DateTime.now();
     _notes.add(
       NoteItem(
         id: now.microsecondsSinceEpoch.toString(),
+        title: _sanitizeTitle(
+          title ?? deriveNoteTitle(content),
+          content: content,
+        ),
         content: content,
         createdAt: now,
         updatedAt: now,
@@ -2590,6 +2643,7 @@ class NotesStore extends ChangeNotifier {
 
   Future<void> updateNote(
     String id, {
+    required String title,
     required String content,
     required String group,
   }) async {
@@ -2597,6 +2651,7 @@ class NotesStore extends ChangeNotifier {
         .map(
           (note) => note.id == id
               ? note.copyWith(
+                  title: _sanitizeTitle(title, content: content),
                   content: content,
                   group: _sanitizeGroup(group),
                   updatedAt: DateTime.now(),
@@ -2661,6 +2716,15 @@ class NotesStore extends ChangeNotifier {
   String _sanitizeGroup(String raw) {
     final cleaned = compactText(raw);
     return cleaned.isEmpty ? defaultGroup : cleaned;
+  }
+
+  String _sanitizeTitle(String raw, {required String content}) {
+    final cleaned = compactText(raw);
+    if (cleaned.isNotEmpty) {
+      return cleaned;
+    }
+    final fallback = deriveNoteTitle(content);
+    return fallback.isNotEmpty ? fallback : '未命名笔记';
   }
 
   Future<void> _persist() async {
