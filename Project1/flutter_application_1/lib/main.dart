@@ -429,11 +429,11 @@ class _CreateNoteScreenState extends State<CreateNoteScreen> {
   @override
   Widget build(BuildContext context) {
     return AppScaffold(
-      resizeToAvoidBottomInset: true,
+      resizeToAvoidBottomInset: false,
       withPageBackdrop: true,
       safeAreaBottom: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
         child: Column(
           children: [
             DetailHeader(
@@ -697,7 +697,7 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
       withPageBackdrop: true,
       safeAreaBottom: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1041,11 +1041,11 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
         await _onWillPop(_hasPendingChanges);
       },
       child: AppScaffold(
-        resizeToAvoidBottomInset: true,
+        resizeToAvoidBottomInset: false,
         withPageBackdrop: true,
         safeAreaBottom: false,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
           child: Column(
             children: [
               DetailHeader(
@@ -1285,7 +1285,7 @@ class EditorTextSurface extends StatelessWidget {
         ),
         RepaintBoundary(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(22, 22, 22, 22),
+            padding: const EdgeInsets.fromLTRB(22, 22, 22, 0),
             child: TextField(
               controller: controller,
               focusNode: focusNode,
