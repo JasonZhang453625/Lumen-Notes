@@ -598,13 +598,13 @@ class _BrowseNotesScreenState extends State<BrowseNotesScreen> {
             children: [
               ActionTile(
                 icon: CupertinoIcons.square_pencil,
-                label: '璋冩暣鍒嗙粍',
+                label: '移动笔记',
                 onTap: () => Navigator.of(sheetContext).pop(_CardAction.move),
               ),
               const SizedBox(height: 10),
               ActionTile(
                 icon: CupertinoIcons.delete,
-                label: '鍒犻櫎绗旇',
+                label: '删除笔记',
                 color: AppColors.destructive,
                 onTap: () => Navigator.of(sheetContext).pop(_CardAction.delete),
               ),
@@ -1049,7 +1049,6 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
           child: Column(
             children: [
               DetailHeader(
-                title: '阅读与编辑',
                 subtitle: '${AppDateFormatter.dateTime(_note.updatedAt)}编辑',
                 onBack: () => _onWillPop(_hasPendingChanges),
                 titleWidget: TextField(
@@ -1062,12 +1061,12 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                     hintText: '输入笔记标题',
                     hintStyle: TextStyle(
                       color: AppColors.textMuted,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                     color: AppColors.textPrimary,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w500,
                     letterSpacing: -0.5,
                   ),
                 ),
@@ -1098,7 +1097,7 @@ class _NoteEditorScreenState extends State<NoteEditorScreen> {
                   },
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 3),
               RepaintBoundary(
                 child: Row(
                   children: [
@@ -1777,9 +1776,17 @@ class _SwipeGroupRowState extends State<SwipeGroupRow>
   }
 
   void _settle(double velocity) {
-    final progress = (_offset.abs() / _maxReveal).clamp(0.0, 1.0);
-    final shouldOpen =
-        velocity < -70 || progress > 0.18 || (velocity < -20 && progress > 0.1);
+    final progress = (-_offset / _maxReveal).clamp(0.0, 1.0);
+    const flingVelocity = 50.0;
+    const settleVelocity = 15.0;
+    const settleProgress = 0.1;
+    final shouldOpen = switch (velocity) {
+      <= -flingVelocity => true,
+      >= flingVelocity => false,
+      <= -settleVelocity when progress > settleProgress => true,
+      >= settleVelocity when progress < (1 - settleProgress) => false,
+      _ => progress >= 0.5,
+    };
 
     if (shouldOpen) {
       _open();
